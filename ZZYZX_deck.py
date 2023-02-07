@@ -1,7 +1,7 @@
 from itertools import product
 import random
 
-from const import SUITS, RANKS
+from constants import SUITS, RANKS
 
 
 class Card:
