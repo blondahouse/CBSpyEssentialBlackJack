@@ -102,7 +102,7 @@ BJ_SETUP_DEFAULT = {
 
         "double after split": list(DOUBLE_AFTER_SPLIT)[0],
         "hitting split aces": list(HITTING_SPLIT_ACES)[1],
-        "original bets only": list(OBO)[0],
+        "original bets only": list(OBO)[1],
         "dealer wins ties": list(TIE)[1]
     }
 }
@@ -116,4 +116,4 @@ SURRENDER = "surrender"
 INSURANCE = "insurance"
 
 if __name__ == '__main__':
-    pass
+    print(type(list(DOUBLE_1011)[1]))

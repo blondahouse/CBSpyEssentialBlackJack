@@ -1,6 +1,6 @@
 import random
 
-from constants import SUITS, RANKS, VALUES, SHOE
+from constants import SUITS, RANKS, VALUES, SHOE, CUT_CARD
 
 
 class Card:
@@ -51,7 +51,7 @@ class Shoe:
     def shuffle(self, setup):
         self.clear()
         self.build()
-        cut_card = setup.get("rules").get("cut-card")
+        cut_card = CUT_CARD.get(setup.get("rules").get("cut-card"))
         random.shuffle(self.cards)
         if cut_card:
             position = range(15, len(self.cards) - 16) if self.decks <= 2 else range(78, len(self.cards) - 79)

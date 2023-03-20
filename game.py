@@ -3,7 +3,7 @@ import re
 from colorama import Fore
 
 from cards import Shoe
-from constants import BJ_SETUP_DEFAULT, PLAYERS, PAYOUT
+from constants import BJ_SETUP_DEFAULT, PLAYERS, PAYOUT, RE_SPLIT_ACES, SOFT17
 from players import Dealer, Player, PlayerHand, BotRandomStrategyHand, BotBasicStrategyHand
 
 
@@ -94,15 +94,19 @@ class Game:
 
     def ask_for_bets(self):
         for player in self.players:
-            player.place_bet()
+            if player.plays:
+                player.place_bet()
 
     def deal_cards(self):  # TODO: no hole card for dealer
         for player in self.players:
-            for hand in player.hands:
-                hand.add_card(self.shoe.draw())
-                hand.add_card(self.shoe.draw())
+            if player.plays:
+                for hand in player.hands:
+                    hand.add_card(self.shoe.draw())
+                    hand.add_card(self.shoe.draw())
+                    hand.log = hand.__str__()
         self.dealer.hands[0].add_card(self.shoe.draw())
         self.dealer.hands[0].add_card(self.shoe.draw())
+        self.dealer.hands[0].log = self.dealer.hands[0].__str__()
 
     def ask_for_actions(self):  # TODO: check if the dealer has blackjack
 
@@ -123,19 +127,35 @@ class Game:
             h.stand = True
 
         def split(p, h):
-            p.hands.append(h.__class__())
-            p.bankroll -= h.bet
-            p.hands[-1].bet = h.bet
-            p.hands[-1].add_card(h.cards.pop())
-            p.hands[-1].add_card(self.shoe.draw())
-            h.add_card(self.shoe.draw())
+            new_hand = h.__class__()
+            new_hand.bet = h.bet
+            new_hand.start_bet = h.bet
+            new_hand.add_card(h.cards.pop())
+            new_hand.add_card(self.shoe.draw())
+            new_hand.log = new_hand.__str__()
 
-            if h.cards[0].rank == 'A' and not self.setup.get("rules").get('re-splitting aces'):
+            h.add_card(self.shoe.draw())
+            # h.log = h.__str__()
+
+            p.hands.append(new_hand)
+            p.bankroll -= h.bet
+
+            # p.hands[-1].bet = h.bet
+            # p.hands[-1].add_card(h.cards.pop())
+            # h.add_card(self.shoe.draw())
+            # p.hands[-1].add_card(self.shoe.draw())
+            # h.log += f'{h.__str__()}'
+            # p.hands[-1].log += f'{p.hands[-1].__str__()}'
+
+            re_splitting_aces = RE_SPLIT_ACES.get(self.setup.get("rules").get('re-splitting aces'))
+            # TODO: hitting split aces is not checked
+            if h.cards[0].rank == 'A' and not re_splitting_aces:
                 h.stand = True
                 p.hands[-1].stand = True
             else:
                 h.is_first_decision = True
                 p.hands[-1].is_first_decision = True
+                self.is_players = True
 
         def surrender():  # TODO: surrender
             pass
@@ -144,69 +164,142 @@ class Game:
             pass
 
         for player in self.players:
-            for hand in player.hands:
-                dealer_card = self.dealer.hands[0].cards[0]
-                setup = self.setup
-                num_of_hands = len(player)
-                bankroll = player.bankroll
-                action = hand.action(dealer_card, setup, num_of_hands, bankroll)
-                match action:
-                    case 'hit':
-                        hit(hand)
-                    case 'stand':
-                        stand(hand)
-                    case 'double':
-                        double(player, hand)
-                    case 'split':
-                        split(player, hand)
-                    case 'surrender':
-                        surrender()
-                    case 'insurance':
-                        insurance()
+            # print(player, end=': ')
+            if player.plays:
+                for hand in player.hands:
+                    dealer_card = self.dealer.hands[0].cards[0]
+                    setup = self.setup
+                    num_of_hands = len(player)
+                    bankroll = player.bankroll
+                    action = hand.action(dealer_card, setup, num_of_hands, bankroll)
+                    hand.log += f' ({action})'
+                    # print(f'({action})')
+                    # input()
+                    match action:
+                        case 'hit':
+                            hit(hand)
+                        case 'stand':
+                            stand(hand)
+                        case 'double':
+                            double(player, hand)
+                        case 'split':
+                            split(player, hand)
+                        case 'surrender':
+                            surrender()
+                        case 'insurance':
+                            insurance()
 
     def print_players(self):
+        print(f'{self.dealer} {self.dealer.hands[0].log}')
         for player in self.players:
-            print(player, end=': ')
-            for hand in player.hands:
-                print(hand)
+            print(player)
+            for index, hand in enumerate(player.hands):
+                # print(f'\t#{index + 1} {hand}')
+                print(f'\t#{index + 1} bet: ${hand.start_bet} {hand.log} {hand.message}')
 
     def dealer_action(self):
-        soft_17 = 17 if self.setup.get("rules").get('dealer hits on soft 17') else 16
+        hit_17 = SOFT17.get(self.setup.get("rules").get('dealer hits on soft 17'))
+        soft_17 = 17 if hit_17 else 16
         while self.dealer.hands[0].value <= soft_17:
+            self.dealer.hands[0].log += f' (hit)'
             self.dealer.hands[0].add_card(self.shoe.draw())
 
     def payout(self):
+
+        # win_blackjack_payout_condition = hand.is_blackjack and not dealer_hand.is_blackjack
+        # print('win_bj:', win_blackjack_payout_condition, end=', ')
+        # if win_blackjack_payout_condition:
+        #     win_rate = hand.bet + hand.bet * PAYOUT.get(self.setup.get("rules").get('blackjack payout'))
+        #     player.bankroll += win_rate
+        #     self.dealer.bankroll -= win_rate
+        #     hand.bet = 0
+        #
+        # win_payout_condition = hand.value <= 21 and not hand.is_blackjack and\
+        #                        (dealer_hand.value < hand.value or 21 < dealer_hand.value)
+        # print('win:', win_payout_condition, end=', ')
+        # if win_payout_condition:
+        #     win_rate = hand.bet + hand.bet
+        #     player.bankroll += win_rate
+        #     self.dealer.bankroll -= win_rate
+        #     hand.bet = 0
+        #
+        # push_condition = hand.value == dealer_hand.value and hand.is_blackjack == dealer_hand.is_blackjack
+        # print('push:', push_condition, end=', ')
+        # if push_condition:
+        #     player.bankroll += hand.bet
+        #     hand.bet = 0
+        #
+        # loose_bj = not hand.is_blackjack and dealer_hand.is_blackjack
+        # loose_dlr = hand.value < dealer_hand.value <= 21
+        # loose_bust = hand.value > 21
+        # loose_condition = loose_bj or loose_dlr or loose_bust
+        # print('loose:', loose_condition, end=', ')
+        # if loose_condition:
+        #     self.dealer.bankroll += hand.bet
+        #     hand.bet = 0
+
+        def bet_lose():
+            self.dealer.bankroll += hand.bet
+            hand.message = f' lost ${hand.bet}'
+            hand.bet = 0
+
+        def bet_push():
+            player.bankroll += hand.bet
+            hand.message = f' pushed $0'
+            hand.bet = 0
+
+        def bet_win():
+            win_rate = hand.bet
+            hand.message = f' won ${win_rate}'
+            player.bankroll += win_rate + hand.bet
+            self.dealer.bankroll -= win_rate
+            hand.bet = 0
+
+        def bet_win_blackjack():
+            win_rate = int(hand.bet * PAYOUT.get(self.setup.get("rules").get('blackjack payout')))
+            hand.message = f' won ${win_rate}'
+            player.bankroll += win_rate + hand.bet
+            self.dealer.bankroll -= win_rate
+            hand.bet = 0
+
+        dealer_hand = self.dealer.hands[0]
         for player in self.players:
-            for hand in player.hands:
-                dealer = self.dealer.hands[0]
+            if player.plays:
+                for hand in player.hands:
 
-                win_blackjack_payout_condition = hand.is_blackjack and not dealer.is_blackjack
-                if win_blackjack_payout_condition:
-                    win_rate = hand.bet + hand.bet * PAYOUT.get(self.setup.get("rules").get('blackjack payout'))
-                    player.bankroll += win_rate
-                    self.dealer.bankroll -= win_rate
-                    hand.bet = 0
+                    if hand.value > dealer_hand.value:
+                        if hand.value > 21:
+                            bet_lose()
+                        else:
+                            bet_win()
+                    elif hand.value == dealer_hand.value:
+                        if hand.value > 21:
+                            bet_lose()
+                        elif hand.value == 21:
+                            if hand.is_blackjack and not dealer_hand.is_blackjack:
+                                bet_win_blackjack()
+                            elif not hand.is_blackjack and dealer_hand.is_blackjack:
+                                bet_lose()
+                            else:
+                                bet_push()
+                        else:
+                            bet_push()
+                    else:
+                        if hand.value > 21:
+                            bet_lose()
+                        elif hand.value == 21:
+                            if hand.is_blackjack:
+                                bet_win_blackjack()
+                            else:
+                                bet_win()
+                        else:
+                            if dealer_hand.value > 21:
+                                bet_win()
+                            else:
+                                bet_lose()
 
-                win_payout_condition = hand.value <= 21 and (dealer.value < hand.value or dealer.value > 21)
-                if win_payout_condition:
-                    win_rate = hand.bet + hand.bet
-                    player.bankroll += win_rate
-                    self.dealer.bankroll -= win_rate
-                    hand.bet = 0
-
-                push_condition = hand.value == dealer.value and hand.is_blackjack == dealer.is_blackjack
-                if push_condition:
-                    player.bankroll += hand.bet
-                    hand.bet = 0
-
-                loose_bj = not hand.is_blackjack and dealer.is_blackjack
-                loose_dlr = hand.value < dealer.value <= 21
-                loose_bust = hand.value > 21
-                loose_condition = loose_bj or loose_dlr or loose_bust
-                if loose_condition:
-                    self.dealer.bankroll += hand.bet
-                    hand.bet = 0
-
+    def reset_players(self):
+        for player in self.players:
             player.reset()
 
     def play(self):
@@ -215,6 +308,7 @@ class Game:
 
         # setting up the game
         self.setup_game()
+        input()
 
         # creating the players
         self.create_players()
@@ -229,12 +323,14 @@ class Game:
 
             # dealing the cards
             self.deal_cards()
+            # print(self.dealer)
+            # input()
 
             # asking the players for their actions
+            self.is_players = True
             while self.is_players:
                 self.is_players = False
                 self.ask_for_actions()
-                self.print_players()
 
             # opening the dealer's hand
             # dealing the dealer's hand to 17
@@ -243,6 +339,13 @@ class Game:
 
             # comparing the hands and paying the players (small cycle end)
             self.payout()
+            print()
+
+            self.print_players()
+            input()
+
+            self.reset_players()
+            self.dealer.reset()
 
             self.remove_winners()
             self.remove_losers()
